@@ -1,24 +1,29 @@
 import { updateProxyProviderAPI } from '@/api'
 import { collapsedBus } from '@/composables/bus'
-import { proxiesFilter, useProxies } from '@/composables/proxies'
+import { renderGroups } from '@/composables/proxies'
 import { PROXY_SORT_TYPE, PROXY_TAB_TYPE } from '@/constant'
 import { getMinCardWidth, isMiddleScreen } from '@/helper/utils'
 import { configs, updateConfigs } from '@/store/config'
 import {
   allProxiesLatencyTest,
   fetchProxies,
+  hasSmartGroup,
+  proxiesFilter,
+  proxiesTabShow,
   proxyGroupList,
   proxyProviederList,
 } from '@/store/proxies'
 import {
   automaticDisconnection,
   collapseGroupMap,
+  groupProxiesByProvider,
   hideUnavailableProxies,
   manageHiddenGroup,
   minProxyCardWidth,
   proxyCardSize,
   proxySortType,
   twoColumnProxyGroup,
+  useSmartGroupSort,
 } from '@/store/settings'
 import {
   ArrowPathIcon,
@@ -27,6 +32,7 @@ import {
   ChevronUpIcon,
   WrenchScrewdriverIcon,
 } from '@heroicons/vue/24/outline'
+import { every } from 'lodash'
 import { computed, defineComponent, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import DialogWrapper from '../common/DialogWrapper.vue'
@@ -42,7 +48,6 @@ export default defineComponent({
   },
   setup(props) {
     const { t } = useI18n()
-    const { proxiesTabShow } = useProxies()
     const isUpgrading = ref(false)
     const isAllLatencyTesting = ref(false)
     const settingsModel = ref(false)
@@ -65,10 +70,12 @@ export default defineComponent({
       return proxyProviederList.value.length > 0
     })
 
+    const defaultModes = ['direct', 'rule', 'global']
     const modeList = computed(() => {
-      return (
-        configs.value?.['mode-list'] || configs.value?.['modes'] || ['direct', 'rule', 'global']
-      )
+      return configs.value?.['mode-list'] || configs.value?.['modes'] || defaultModes
+    })
+    const needTranslateModes = computed(() => {
+      return every(modeList.value, (mode) => defaultModes.includes(mode.toLowerCase()))
     })
 
     const handlerModeChange = (e: Event) => {
@@ -87,7 +94,6 @@ export default defineComponent({
       }
     }
 
-    const { renderGroups } = useProxies()
     const hasNotCollapsed = computed(() => {
       return renderGroups.value.some((name) => collapseGroupMap.value[name])
     })
@@ -172,7 +178,7 @@ export default defineComponent({
                 key={mode}
                 value={mode}
               >
-                {t(mode.toLowerCase())}
+                {needTranslateModes.value ? t(mode.toLowerCase()) : mode}
               </option>
             )
           })}
@@ -211,7 +217,12 @@ export default defineComponent({
 
       const toggleCollapseAll = (
         <button
-          class={['btn btn-circle btn-sm', twoColumnProxyGroup.value && 'max-sm:hidden']}
+          class={[
+            'btn btn-circle btn-sm',
+            twoColumnProxyGroup.value &&
+              proxiesTabShow.value === PROXY_TAB_TYPE.PROXIES &&
+              'max-sm:hidden',
+          ]}
           onClick={handlerClickToggleCollapse}
         >
           {hasNotCollapsed.value ? (
@@ -226,7 +237,7 @@ export default defineComponent({
         <TextInput
           class={props.horizontal && !isMiddleScreen.value ? 'w-32 max-w-80 flex-1' : 'w-80'}
           v-model={proxiesFilter.value}
-          placeholder={t('search')}
+          placeholder={`${t('search')} | ${t('searchMultiple')}`}
           clearable={true}
         />
       )
@@ -244,6 +255,24 @@ export default defineComponent({
               <div class="flex items-center gap-2">
                 {t('sortBy')}
                 {sort}
+              </div>
+              {hasSmartGroup.value && (
+                <div class="flex items-center gap-2">
+                  {t('useSmartGroupSort')}
+                  <input
+                    class="toggle"
+                    type="checkbox"
+                    v-model={useSmartGroupSort.value}
+                  />
+                </div>
+              )}
+              <div class="flex items-center gap-2">
+                {t('groupProxiesByProvider')}
+                <input
+                  type="checkbox"
+                  class="toggle"
+                  v-model={groupProxiesByProvider.value}
+                />
               </div>
               <div class="flex items-center gap-2">
                 {t('unavailableProxy')}

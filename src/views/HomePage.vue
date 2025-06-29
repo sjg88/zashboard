@@ -1,55 +1,62 @@
 <template>
   <div class="bg-base-200/50 home-page flex size-full">
     <SideBar v-if="!isMiddleScreen" />
-
-    <div
-      class="flex flex-1 flex-col overflow-hidden"
-      ref="swiperRef"
-    >
+    <RouterView v-slot="{ Component, route }">
       <div
-        v-if="ctrlComp && isSidebarCollapsed"
-        class="bg-base-100 w-full"
+        class="flex flex-1 flex-col overflow-hidden"
+        ref="swiperRef"
       >
-        <component
-          :is="ctrlComp"
-          :horizontal="true"
-        />
-      </div>
-      <div class="relative h-0 flex-1">
-        <div class="absolute flex h-full w-full flex-col overflow-y-auto">
-          <RouterView v-slot="{ Component, route }">
-            <Transition :name="(route.meta.transition as string) || 'fade'">
+        <div
+          v-if="ctrlsMap[route.name as string] && isSidebarCollapsed"
+          class="bg-base-100 ctrls-bar w-full"
+        >
+          <component
+            :is="ctrlsMap[route.name as string]"
+            :horizontal="true"
+          />
+        </div>
+
+        <div class="relative h-0 flex-1">
+          <div class="absolute flex h-full w-full flex-col overflow-y-auto">
+            <Transition
+              :name="(route.meta.transition as string) || 'fade'"
+              v-if="isMiddleScreen"
+            >
               <Component :is="Component" />
             </Transition>
-          </RouterView>
-        </div>
-      </div>
-      <template v-if="isMiddleScreen">
-        <div
-          class="shrink-0"
-          :class="isPWA ? 'h-[5.5rem]' : 'h-14'"
-        />
-        <div
-          class="dock dock-sm bg-base-200 z-30"
-          :class="isPWA ? 'h-[5.5rem] pb-8' : 'h-14'"
-        >
-          <button
-            v-for="r in renderRoutes"
-            :key="r"
-            @click="router.push({ name: r })"
-            :class="r === route.name && 'dock-active'"
-          >
-            <component
-              :is="ROUTE_ICON_MAP[r]"
-              class="size-[1.2em]"
+            <Component
+              v-else
+              :is="Component"
             />
-            <span class="dock-label">
-              {{ $t(r) }}
-            </span>
-          </button>
+          </div>
         </div>
-      </template>
-    </div>
+        <template v-if="isMiddleScreen">
+          <div
+            class="nav-bar shrink-0"
+            :style="styleForSafeArea"
+          />
+          <div
+            class="dock dock-sm bg-base-200 z-30"
+            :style="styleForSafeArea"
+          >
+            <button
+              v-for="r in renderRoutes"
+              :key="r"
+              @click="router.push({ name: r })"
+              :class="r === route.name && 'dock-active'"
+            >
+              <component
+                :is="ROUTE_ICON_MAP[r]"
+                class="size-5"
+              />
+              <span class="dock-label">
+                {{ $t(r) }}
+              </span>
+            </button>
+          </div>
+        </template>
+      </div>
+    </RouterView>
 
     <DialogWrapper v-model="autoSwitchBackendDialog">
       <h3 class="text-lg font-bold">{{ $t('currentBackendUnavailable') }}</h3>
@@ -80,25 +87,23 @@ import ProxiesCtrl from '@/components/sidebar/ProxiesCtrl.tsx'
 import RulesCtrl from '@/components/sidebar/RulesCtrl.tsx'
 import SideBar from '@/components/sidebar/SideBar.vue'
 import { useNotification } from '@/composables/notification'
-import { useProxies } from '@/composables/proxies'
-import { rulesTabShow } from '@/composables/rules'
 import { useSettings } from '@/composables/settings'
 import { useSwipeRouter } from '@/composables/swipe'
 import { PROXY_TAB_TYPE, ROUTE_ICON_MAP, ROUTE_NAME, RULE_TAB_TYPE } from '@/constant'
-import { getUrlFromBackend, renderRoutes } from '@/helper'
-import { isMiddleScreen, isPWA } from '@/helper/utils'
+import { renderRoutes } from '@/helper'
+import { getLabelFromBackend, isMiddleScreen } from '@/helper/utils'
 import { fetchConfigs } from '@/store/config'
 import { initConnections } from '@/store/connections'
 import { initLogs } from '@/store/logs'
 import { initSatistic } from '@/store/overview'
-import { fetchProxies } from '@/store/proxies'
-import { fetchRules } from '@/store/rules'
+import { fetchProxies, proxiesTabShow } from '@/store/proxies'
+import { fetchRules, rulesTabShow } from '@/store/rules'
 import { isSidebarCollapsed } from '@/store/settings'
 import { activeBackend, activeUuid, backendList } from '@/store/setup'
 import type { Backend } from '@/types'
 import { useDocumentVisibility } from '@vueuse/core'
-import { computed, ref, watch, type Component } from 'vue'
-import { RouterView, useRoute, useRouter } from 'vue-router'
+import { ref, watch, type Component } from 'vue'
+import { RouterView, useRouter } from 'vue-router'
 
 const ctrlsMap: Record<string, Component> = {
   [ROUTE_NAME.connections]: ConnectionCtrl,
@@ -107,12 +112,12 @@ const ctrlsMap: Record<string, Component> = {
   [ROUTE_NAME.rules]: RulesCtrl,
 }
 
+const styleForSafeArea = {
+  height: 'calc(var(--spacing) * 14 + env(safe-area-inset-bottom))',
+  'padding-bottom': 'env(safe-area-inset-bottom)',
+}
+
 const router = useRouter()
-const route = useRoute()
-const ctrlComp = computed(() => {
-  return ctrlsMap[route.name as keyof typeof ctrlsMap]
-})
-const { proxiesTabShow } = useProxies()
 const { swiperRef } = useSwipeRouter()
 
 watch(
@@ -159,7 +164,7 @@ const autoSwitchBackend = async () => {
     showNotification({
       content: 'backendSwitchTo',
       params: {
-        backend: getUrlFromBackend(avaliable),
+        backend: getLabelFromBackend(avaliable),
       },
     })
   }
@@ -196,6 +201,11 @@ watch(
     immediate: true,
   },
 )
+
+watch(documentVisible, () => {
+  if (documentVisible.value !== 'visible') return
+  fetchProxies()
+})
 
 const { checkUIUpdate } = useSettings()
 

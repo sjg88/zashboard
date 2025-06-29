@@ -12,16 +12,7 @@
       class="p-2"
     >
       <template v-slot="{ item }: { item: LogWithSeq }">
-        <div class="card mb-1 block p-2 text-sm break-all">
-          <span>{{ item.seq }}</span>
-          <span class="text-main mx-2">
-            {{ item.time }}
-          </span>
-          <span :class="textColorMapForType[item.type as keyof typeof textColorMapForType]">
-            {{ item.type }}
-          </span>
-          <span class="ml-2">{{ item.payload }}</span>
-        </div>
+        <LogsCard :log="item"></LogsCard>
       </template>
     </VirtualScroller>
   </div>
@@ -29,31 +20,34 @@
 
 <script setup lang="ts">
 import VirtualScroller from '@/components/common/VirtualScroller.vue'
-import { LOG_LEVEL } from '@/constant'
+import LogsCard from '@/components/logs/LogsCard.vue'
 import { isMiddleScreen } from '@/helper/utils'
-import { logFilter, logs } from '@/store/logs'
+import { logFilter, logTypeFilter, logs } from '@/store/logs'
 import type { LogWithSeq } from '@/types'
 import { computed } from 'vue'
 
-const textColorMapForType = {
-  [LOG_LEVEL.Trace]: 'text-success',
-  [LOG_LEVEL.Debug]: 'text-accent',
-  [LOG_LEVEL.Info]: 'text-info',
-  [LOG_LEVEL.Warning]: 'text-warning',
-  [LOG_LEVEL.Error]: 'text-error',
-  [LOG_LEVEL.Fatal]: 'text-error',
-  [LOG_LEVEL.Panic]: 'text-error',
-}
-
 const renderLogs = computed(() => {
-  if (logFilter.value) {
+  let renderLogs = logs.value
+
+  if (logFilter.value || logTypeFilter.value) {
     const regex = new RegExp(logFilter.value, 'i')
 
-    return logs.value.filter((log) => {
-      return [log.payload, log.time, log.type].some((i) => regex.test(i))
+    renderLogs = logs.value.filter((log) => {
+      if (logFilter.value && ![log.payload, log.time, log.type].some((i) => regex.test(i))) {
+        return false
+      }
+
+      if (
+        logTypeFilter.value &&
+        !(log.payload.includes(logTypeFilter.value) || log.type === logTypeFilter.value)
+      ) {
+        return false
+      }
+
+      return true
     })
   }
 
-  return logs.value
+  return renderLogs
 })
 </script>

@@ -43,18 +43,7 @@
         <div class="flex items-center gap-2">
           {{ $t('defaultTheme') }}
           <div class="join">
-            <select
-              class="select select-sm join-item w-48"
-              v-model="defaultTheme"
-            >
-              <option
-                v-for="opt in themes"
-                :key="opt"
-                :value="opt"
-              >
-                {{ opt }}
-              </option>
-            </select>
+            <ThemeSelector v-model:value="defaultTheme" />
             <button
               class="btn btn-sm join-item"
               @click="customThemeModal = !customThemeModal"
@@ -69,18 +58,7 @@
           v-if="autoTheme"
         >
           {{ $t('darkTheme') }}
-          <select
-            class="select select-sm w-48"
-            v-model="darkTheme"
-          >
-            <option
-              v-for="opt in themes"
-              :key="opt"
-              :value="opt"
-            >
-              {{ opt }}
-            </option>
-          </select>
+          <ThemeSelector v-model:value="darkTheme" />
         </div>
         <div class="flex items-center gap-2">
           {{ $t('fonts') }}
@@ -101,7 +79,7 @@
           <span class="shrink-0"> {{ $t('customBackgroundURL') }} </span>
           <div class="join">
             <TextInput
-              class="join-item max-w-64 flex-1"
+              class="join-item w-48"
               v-model="customBackgroundURL"
               :clearable="true"
               @update:modelValue="handlerBackgroundURLChange"
@@ -110,9 +88,16 @@
               class="btn join-item btn-sm"
               @click="handlerClickUpload"
             >
-              <ArrowUpCircleIcon class="h-4 w-4" />
+              <ArrowUpTrayIcon class="h-4 w-4" />
             </button>
           </div>
+          <button
+            class="btn btn-circle join-item btn-sm"
+            v-if="customBackgroundURL"
+            @click="displayBgProperty = !displayBgProperty"
+          >
+            <AdjustmentsHorizontalIcon class="h-4 w-4" />
+          </button>
           <input
             ref="inputFileRef"
             type="file"
@@ -121,44 +106,49 @@
             @change="handlerFileChange"
           />
         </div>
+        <template v-if="customBackgroundURL && displayBgProperty">
+          <div class="flex items-center gap-2">
+            {{ $t('transparent') }}
+            <input
+              type="range"
+              min="0"
+              max="100"
+              v-model="dashboardTransparent"
+              class="range max-w-64"
+              @touchstart.passive.stop
+              @touchmove.passive.stop
+              @touchend.passive.stop
+            />
+          </div>
+
+          <div class="flex items-center gap-2">
+            {{ $t('blurIntensity') }}
+            <input
+              type="range"
+              min="0"
+              max="40"
+              v-model="blurIntensity"
+              class="range max-w-64"
+              @touchstart.stop
+              @touchmove.stop
+              @touchend.stop
+            />
+          </div>
+        </template>
         <div
           class="flex items-center gap-2"
-          v-if="customBackgroundURL"
+          v-if="!isSingBox || displayAllFeatures"
         >
-          {{ $t('transparent') }}
+          {{ $t('autoUpgrade') }}
           <input
-            type="range"
-            min="0"
-            max="100"
-            v-model="dashboardTransparent"
-            class="range max-w-64"
-            @touchstart.stop
-            @touchmove.stop
-            @touchend.stop
-          />
-        </div>
-        <div class="flex items-center gap-2 md:hidden">
-          {{ $t('swipeInTabs') }}
-          <input
-            type="checkbox"
-            v-model="swipeInTabs"
             class="toggle"
+            type="checkbox"
+            v-model="autoUpgrade"
           />
         </div>
-      </div>
-      <div
-        class="flex items-center gap-2"
-        v-if="!isSingBox"
-      >
-        {{ $t('autoUpgrade') }}
-        <input
-          class="toggle"
-          type="checkbox"
-          v-model="autoUpgrade"
-        />
       </div>
       <div class="grid max-w-3xl grid-cols-2 gap-2 sm:grid-cols-4">
-        <template v-if="!isSingBox">
+        <template v-if="!isSingBox || displayAllFeatures">
           <button
             :class="twMerge('btn btn-primary btn-sm', isUIUpgrading ? 'animate-pulse' : '')"
             @click="handlerClickUpgradeUI"
@@ -184,33 +174,42 @@
 import { isSingBox, upgradeUIAPI, zashboardVersion } from '@/api'
 import LanguageSelect from '@/components/settings/LanguageSelect.vue'
 import { useSettings } from '@/composables/settings'
-import { ALL_THEME, FONTS } from '@/constant'
-import { exportSettings } from '@/helper'
-import {
-  deleteBase64FromIndexedDB,
-  isPWA,
-  LOCAL_IMAGE,
-  saveBase64ToIndexedDB,
-} from '@/helper/utils'
+import { FONTS } from '@/constant'
+import { handlerUpgradeSuccess } from '@/helper'
+import { deleteBase64FromIndexedDB, LOCAL_IMAGE, saveBase64ToIndexedDB } from '@/helper/indexeddb'
+import { exportSettings, isPWA } from '@/helper/utils'
 import {
   autoTheme,
   autoUpgrade,
+  blurIntensity,
   customBackgroundURL,
-  customThemes,
   darkTheme,
   dashboardTransparent,
   defaultTheme,
+  displayAllFeatures,
   font,
-  swipeInTabs,
 } from '@/store/settings'
-import { ArrowPathIcon, ArrowUpCircleIcon, PlusIcon } from '@heroicons/vue/24/outline'
+import {
+  AdjustmentsHorizontalIcon,
+  ArrowPathIcon,
+  ArrowUpTrayIcon,
+  PlusIcon,
+} from '@heroicons/vue/24/outline'
 import { twMerge } from 'tailwind-merge'
-import { computed, ref } from 'vue'
+import { ref, watch } from 'vue'
 import ImportSettings from '../common/ImportSettings.vue'
 import TextInput from '../common/TextInput.vue'
 import CustomTheme from './CustomTheme.vue'
+import ThemeSelector from './ThemeSelector.vue'
 
 const customThemeModal = ref(false)
+const displayBgProperty = ref(false)
+
+watch(customBackgroundURL, (value) => {
+  if (value) {
+    displayBgProperty.value = true
+  }
+})
 
 const inputFileRef = ref()
 const handlerClickUpload = () => {
@@ -242,19 +241,14 @@ const handlerClickUpgradeUI = async () => {
   try {
     await upgradeUIAPI()
     isUIUpgrading.value = false
-    window.location.reload()
+    handlerUpgradeSuccess()
+    setTimeout(() => {
+      window.location.reload()
+    }, 1000)
   } catch {
     isUIUpgrading.value = false
   }
 }
-
-const themes = computed(() => {
-  if (customThemes.value.length) {
-    return [...ALL_THEME, ...customThemes.value.map((theme) => theme.name)]
-  }
-
-  return ALL_THEME
-})
 
 const refreshPages = async () => {
   const registrations = await navigator.serviceWorker.getRegistrations()
